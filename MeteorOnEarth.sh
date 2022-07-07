@@ -1,4 +1,3 @@
-###さくせいちゅうです！
 #!/bin/bash
 export lang=ja_jp.utf-8
 
