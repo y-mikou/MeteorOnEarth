@@ -1,116 +1,115 @@
-さくせいちゅうです！
-
+###さくせいちゅうです！
 #!/bin/bash
 export lang=ja_jp.utf-8
 
 tgtFile=${1}   #引数で指定されたファイルを対象とする
-chrset=$(file -i ${tgtFile})
+chrEmph=${2}   #引数で指定された文字を傍点文字とする
 
-if [ ! -e ${1} ]; then
+#chrset=$(file -i ${tgtFile})
+
+#############################################################
+# 関数宣言部
+#############################################################
+
+# 置換元文字列群作成
+# 入力文字の中から《《…文字列…》》を検索し結果を列方向に並べる
+function pckTgtStr () {
+  #パイプでも標準入力でも
+  if [ -p /dev/stdin ]; then
+      if [ "`echo $@`" == "" ]; then 
+          __str=`cat -`
+      else
+          __str=$@
+      fi
+  else
+      __str=$@
+  fi
+
+  # 処理
+    echo "${__str}" \
+  | grep -E -o "《《[^》]+》》"  \
+  | uniq
+}
+
+# 置換先文字列群作成
+# 入力文字をモノルビへ変換する
+function mkDstStr () {
+  #パイプでも標準入力でも
+  if [ -p /dev/stdin ]; then
+      if [ "`echo $@`" == "" ]; then 
+          __str=`cat -`
+      else
+          __str=$@
+      fi
+  else
+      __str=$@
+  fi
+
+  # 処理
+    echo "${__str}" \
+    | sed -e 's/《《//g' \
+    | sed -e 's/》》//g' \
+    | while read line || [ -n "${line}" ]; do
+          echo "${line}" \
+        | sed -e 's/\(.\)/｜\1《'${chrEmph}'》/g'
+      done
+}
+
+#############################################################
+# メイン
+#############################################################
+
+# チェック #################################################
+if [ ! -e ${tgtFile} ]; then
   echo "💩 そんなファイルいないです"
   exit 1
 fi
 
-if [ "${chrset##*charset=}" = "unknown-8bit" ]; then
-  iconv -f SHIFT_JIS -t UTF-8 ${tgtFile} > tmp1_ltlbgtmp
-  cat tmp1_ltlbgtmp >${tgtFile}
+#入れ子検知チェックをいれる
+
+if [ ${#chrEmph} -eq 0 ]; then
+  echo "🍕 第2引数がないので傍点文字は「・」になります"
+  chrRby='・'
 fi
 
-destFile=${tgtFile/".txt"/"_rubied.txt"} #出力ファイルの指定する
-touch ${destFile}                        #出力先ファイルを生成
+if [ ! ${#chrEmph} -eq 1 ]; then
+  echo "🍕 傍点文字は1文字にしてください"
+  exit 1
+fi
 
+# 入力ファイルがSJISだったら、UTF8に変換する
+if [ "${chrset##*charset=}" = "unknown-8bit" ]; then
+  iconv -f SHIFT_JIS -t UTF-8 "${tgtFile}" >tmp1_moe
+else
+  cat "${tgtFile}" >tmp1_moe
+fi
+# 後続処理ファイルはtmp1_moe
 
-##《《基底文字》》を一旦｜基底文字《基底文字》にする。
+# 前処理 #################################################
 
-cat tgtFile >emphasisInput_ltlbgtmp
-cat emphasisInput_ltlbgtmp \
-| grep -E -o "《《[^》]+》》"  \
-| uniq \
->tgt_ltlbgtmp
+#出力ファイルの指定する
+dstFile=${tgtFile/".txt"/"_moe.txt"}
+touch ${dstFile}
 
-  ## 中間ファイルreplaceSeed(《《[^》]*》》で抽出したもの)の長さが0の場合、処理しない
-  if [ -s tgt_ltlbgtmp ]; then 
+## 変換処理 #############################################
 
-    # 圏点の基底文字列のみの中間ファイルを作成する
+cat tmp1_moe | pckTgtStr >tgtStr_moe
+cat tgtStr_moe | mkDstStr >dstStr_moe
 
-    # ルビとして振る「﹅」を、rawと同じ文字だけもった中間ファイルを作成する。
-    # [^字^](回転)、[l\[左右\]r\](強制合字)、^^(縦中横)、~~(自動縦中横)は
-    # 傍点観点では1文字として扱う。
-    cat raw_ltlbgtmp \
-    | sed -e 's/\*\*//g' \
-    | sed -e 's/゛//g' \
-    | sed -e 's/\[\^.\^\]/﹅/g' \
-    | sed -e 's/\[l\[..\]r\]/﹅/g' \
-    | sed -e 's/\^.\{1,3\}\^/﹅/g' \
-    | sed -e 's/~.\{2\}~/﹅/g' \
-    | sed -e 's/./﹅/g' \
-    >emphtmp_ltlbgtmp
-  
-    # 上記で作った基底文字ファイルとルビ文字ファイルを列単位に結合する
-    # その後、各行ごとに置換処理を行い、
-    # 中間ファイルtgtの各行を置換元とする置換先文字列を作成する。
-    ## →置換先文字列
-    ## 　各行ごとに「,」の前が基底文字、「,」の後がルビ文字となっているので、
-    ## 　これを利用してルビタグの文字列を作成する。
-    paste -d , raw_ltlbgtmp emphtmp_ltlbgtmp \
-    | while read line || [ -n "${line}" ]; do 
+paste -d / tgtStr_moe dstStr_moe \
+  | sed -e 's/^/\| sed -e '\''s\//' \
+  | sed -e 's/$/\/g'\'' \\/g' \
+  | sed -z 's/^/cat tmp1_moe \\\n/g' \
+  | sed -z 's/$/>'${dstFile}' \n/g' \
+  > tmp_moe.sh
 
-      echo "${line##*,}" \
-      | grep -E -o . \
-      | sed -e 's/^/<ruby class=\"ltlbg_emphasis\" data-emphasis=\"/' \
-      | sed -e 's/$/\">/' \
-      >1_ltlbgtmp
+bash tmp_moe.sh
 
-      echo "${line%%,*}" \
-      | grep -E -o "(\[\^.\^\]|\^[^\^]+\^|\~[^~]{2}\~|<[^>]>[^<]+<\/>|\{[^｜]\+｜[^\}]\+\}|.゛|.)" \
-      >2_ltlbgtmp
+echo "✨ "${destFile}"を出力しました[傍点をルビに]"
 
-      echo "${line##*,}" \
-      | grep -E -o "." \
-      | sed -e 's/^/<rt>/g' \
-      | sed -e 's/$/<\/rt><\/ruby>/g' \
-      >3_ltlbgtmp
-
-      paste 1_ltlbgtmp 2_ltlbgtmp 3_ltlbgtmp \
-      | sed -e 's/\t//g' \
-      | sed -z 's/\n//g' \
-      | sed -e 's/\//\\\//g' \
-      | sed -e 's/\"/\\\"/g' \
-      | sed -e 's/\[/\\\[/g' \
-      | sed -e 's/\]/\\\]/g' \
-      | sed -e 's/\^/\\\^/g' \
-      | sed -e 's/\*/\\\*/g' \
-      | sed -e 's/$/\/g'\'' \\/'
-
-      echo ''
-      done \
-    >rep_ltlbgtmp
-
-    cat tgt_ltlbgtmp \
-    | sed -e 's/\//\\\//g' \
-    | sed -e 's/\"/\\\"/g' \
-    | sed -e 's/\[/\\\[/g' \
-    | sed -e 's/\]/\\\]/g' \
-    | sed -e 's/\^/\\\^/g' \
-    | sed -e 's/\*/\\\*/g' \
-    | sed -e 's/^/\| sed -e '\''s\//' \
-    | sed -e 's/$/\//g' \
-    >replaceSeed_ltlbgtmp
-    
-    paste replaceSeed_ltlbgtmp rep_ltlbgtmp \
-    | sed -e 's/\t//g' \
-    | sed -z 's/^/cat emphasisInput_ltlbgtmp \\\n/' \
-    >tmp.sh
-    bash  tmp.sh >tmp1_ltlbgtmp
-
-    cat tmp1_ltlbgtmp \
-    | sed -e 's/<ruby class=\"ltlbg_emphasis\" data-emphasis=\"﹅\">〼<rt>﹅<\/rt><\/ruby>/<span class=\"ltlbg_wSp\"><\/span>/g' \
-    | sed -e 's/<ruby class=\"ltlbg_emphasis\" data-emphasis=\"﹅\">〿<rt>﹅<\/rt><\/ruby>/<span class=\"ltlbg_sSp\"><\/span>/g' \
-    | sed -e 's/<ruby class=\"ltlbg_emphasis\" data-emphasis=\"﹅\">\([\*\^\~]\?\)<rt>﹅<\/rt><\/ruby>/\1/g' \
-    >tmp2_ltlbgtmp
-    cat tmp2_ltlbgtmp >emphasisOutput_ltlbgtmp
-  else
-    cat emphasisInput_ltlbgtmp >emphasisOutput_ltlbgtmp
-  fi
-  cat emphasisOutput_ltlbgtmp \
-  >tmp1_ltlbgtmp
+# 後処理 #################################################
+pth=$(pwd)
+rmstrBase='rm -rf '${pth}'/'
+eval $rmstrBase'*_moe'
+eval $rmstrBase'tmp_moe.sh'
+exit 0
