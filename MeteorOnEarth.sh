@@ -90,9 +90,16 @@ fi
 dstFile=${tgtFile/".txt"/"_moe.txt"}
 touch ${dstFile}
 
-## 変換処理 #############################################
+# 変換処理 ###############################################
 
 cat tmp1_moe | pckTgtStr >tgtStr_moe
+
+## 中間ファイルreplaceSeed(《《[^》]*》》で抽出したもの)の長さが0の場合、処理しない
+if [ ! -s tgtStr_moe ]; then 
+  echo "🤔 変換対象はありませんでした"
+  exit 1
+fi
+
 cat tgtStr_moe | mkDstStr >dstStr_moe
 
 paste -d / tgtStr_moe dstStr_moe \
@@ -104,7 +111,7 @@ paste -d / tgtStr_moe dstStr_moe \
 
 bash tmp_moe.sh
 
-echo "✨ "${destFile}"を出力しました[傍点をルビに]"
+echo "✨ "${dstFile}"を出力しました[傍点をルビに]"
 
 # 後処理 #################################################
 pth=$(pwd)
