@@ -68,7 +68,7 @@ fi
 
 if [ ${#chrEmph} -eq 0 ]; then
   echo "🍕 第2引数がないので傍点文字は「・」になります"
-  chrRby='・'
+  chrEmph='・'
 fi
 
 if [ ! ${#chrEmph} -eq 1 ]; then
